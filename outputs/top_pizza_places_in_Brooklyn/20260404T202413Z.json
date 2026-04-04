@@ -1,0 +1,216 @@
+{
+  "query": "top pizza places in Brooklyn",
+  "entity_type": "Restaurant",
+  "columns": [
+    "Name",
+    "Location",
+    "Rating",
+    "Price Range",
+    "Cuisine",
+    "Delivery Options",
+    "Website"
+  ],
+  "entities": [
+    {
+      "entity_type": "Restaurant",
+      "fields": {
+        "Name": {
+          "value": "Di Fara Pizza",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "Dom built Di Fara on premium ingredients and recipes perfected over decades.",
+          "confidence": 0.9
+        },
+        "Location": {
+          "value": "1424 Avenue J, Brooklyn, NY 11230",
+          "source_url": "openai_search_summary",
+          "excerpt": "1424 Avenue J, Brooklyn, NY 11230",
+          "confidence": 0.9
+        },
+        "Rating": {
+          "value": "9.4",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "“Double 9.4.” ➞ Dave portnoy, onebite pizza reviews",
+          "confidence": 0.9
+        },
+        "Price Range": {
+          "value": "$$",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "Dom built Di Fara on premium ingredients and recipes perfected over decades.",
+          "confidence": 0.9
+        },
+        "Cuisine": {
+          "value": "Pizza",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "“The holy grail of classic New York–style pizza.” ➞ New york MAGAZINE",
+          "confidence": 0.9
+        },
+        "Delivery Options": {
+          "value": "Available in grocery stores",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "It’s now in grocery stores, so you can bring the Brooklyn legend home.",
+          "confidence": 0.9
+        },
+        "Website": {
+          "value": "https://www.difarapizzany.com/",
+          "source_url": "https://www.difarapizzany.com/?utm_source=openai",
+          "excerpt": "Dom built Di Fara on premium ingredients and recipes perfected over decades.",
+          "confidence": 0.9
+        }
+      },
+      "summary": "Di Fara Pizza is a renowned pizza place in Brooklyn, famous for its high-quality ingredients and exceptional ratings.",
+      "relevance": 0.95
+    },
+    {
+      "entity_type": "Restaurant",
+      "fields": {
+        "Name": {
+          "value": "L&B Spumoni Gardens",
+          "source_url": "https://spumonigardens.com/?utm_source=openai",
+          "excerpt": "Welcome to L&B Spumoni Gardens – A Brooklyn Tradition Since 1939",
+          "confidence": 0.9
+        },
+        "Location": {
+          "value": "2725 86th St, Brooklyn, NY 11223",
+          "source_url": "openai_search_summary",
+          "excerpt": "2725 86th St, Brooklyn, NY 11223",
+          "confidence": 0.9
+        },
+        "Rating": {
+          "value": "4.6",
+          "source_url": "openai_search_summary",
+          "excerpt": "4.6 (11278 reviews)",
+          "confidence": 0.9
+        },
+        "Price Range": {
+          "value": "$$",
+          "source_url": "openai_search_summary",
+          "excerpt": "$$",
+          "confidence": 0.9
+        },
+        "Cuisine": {
+          "value": "Italian-American",
+          "source_url": "https://spumonigardens.com/?utm_source=openai",
+          "excerpt": "Discover the heart of authentic Italian-American cuisine at L&B Spumoni Gardens",
+          "confidence": 0.9
+        },
+        "Delivery Options": {
+          "value": "Takeout, Catering",
+          "source_url": "https://spumonigardens.com/?utm_source=openai",
+          "excerpt": "Catering That Delivers Flavors and Memories Catering & Events",
+          "confidence": 0.9
+        },
+        "Website": {
+          "value": "https://spumonigardens.com",
+          "source_url": "https://spumonigardens.com/?utm_source=openai",
+          "excerpt": "Visit us at spumonigardens.com",
+          "confidence": 0.9
+        }
+      },
+      "summary": "L&B Spumoni Gardens is a renowned pizza place in Brooklyn, famous for its Sicilian square pizza and Italian-American cuisine.",
+      "relevance": 0.9
+    },
+    {
+      "entity_type": "Restaurant",
+      "fields": {
+        "Name": {
+          "value": "L'industrie Pizzeria - Williamsburg",
+          "source_url": "http://www.lindustriebk.com/?utm_source=openai",
+          "excerpt": "This Williamsburg spot is famed for its thin, crispy crusts.",
+          "confidence": 0.9
+        },
+        "Location": {
+          "value": "254 S 2nd St, Brooklyn, NY 11211",
+          "source_url": "openai_search_summary",
+          "excerpt": "254 S 2nd St, Brooklyn, NY 11211",
+          "confidence": 0.9
+        },
+        "Rating": {
+          "value": "4.7",
+          "source_url": "openai_search_summary",
+          "excerpt": "4.7 (5529 reviews)",
+          "confidence": 0.9
+        },
+        "Price Range": {
+          "value": "$10–20",
+          "source_url": "openai_search_summary",
+          "excerpt": "$10–20",
+          "confidence": 0.9
+        },
+        "Cuisine": {
+          "value": "Pizza",
+          "source_url": "openai_search_summary",
+          "excerpt": "Pizza restaurant",
+          "confidence": 0.9
+        },
+        "Delivery Options": {
+          "value": "Available",
+          "source_url": "openai_search_summary",
+          "excerpt": "Open now · Pizza restaurant",
+          "confidence": 0.9
+        },
+        "Website": {
+          "value": "http://www.lindustriebk.com/?utm_source=openai",
+          "source_url": "openai_search_summary",
+          "excerpt": "L'industrie Pizzeria - Williamsburg",
+          "confidence": 0.9
+        }
+      },
+      "summary": "L'industrie Pizzeria is known for its innovative thin crust pizzas, making it a standout in Brooklyn's pizza scene.",
+      "relevance": 0.9
+    },
+    {
+      "entity_type": "Restaurant",
+      "fields": {
+        "Name": {
+          "value": "Best Pizza",
+          "source_url": "http://www.bestpizzawilliamsburg.com/?utm_source=openai",
+          "excerpt": "Best Pizza serves wood-fired pies with a perfect balance of crispy and chewy crust.",
+          "confidence": 0.9
+        },
+        "Location": {
+          "value": "33 Havemeyer St, Brooklyn, NY 11211",
+          "source_url": "openai_search_summary",
+          "excerpt": "33 Havemeyer St, Brooklyn, NY 11211",
+          "confidence": 0.9
+        },
+        "Rating": {
+          "value": "4.5",
+          "source_url": "openai_search_summary",
+          "excerpt": "4.5 (2060 reviews)",
+          "confidence": 0.9
+        },
+        "Price Range": {
+          "value": "$10–20",
+          "source_url": "openai_search_summary",
+          "excerpt": "$10–20",
+          "confidence": 0.9
+        },
+        "Cuisine": {
+          "value": "Pizza",
+          "source_url": "openai_search_summary",
+          "excerpt": "Pizza restaurant",
+          "confidence": 0.9
+        },
+        "Delivery Options": {
+          "value": "Available",
+          "source_url": "openai_search_summary",
+          "excerpt": "Open now · Pizza restaurant",
+          "confidence": 0.9
+        },
+        "Website": {
+          "value": "http://www.bestpizzawilliamsburg.com/?utm_source=openai",
+          "source_url": "openai_search_summary",
+          "excerpt": "Best Pizza",
+          "confidence": 0.9
+        }
+      },
+      "summary": "Best Pizza is celebrated for its wood-fired pies, making it a popular choice among pizza lovers in Brooklyn.",
+      "relevance": 0.9
+    }
+  ],
+  "metadata": {
+    "timestamp": "2026-04-04T20:24:13.449523+00:00",
+    "sources_consulted": 3,
+    "total_entities": 4
+  }
+}

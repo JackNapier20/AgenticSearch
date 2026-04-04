@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Search</title>
+  <style>
+    /* ── Reset & Tokens ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #6c8ef5;
+      --accent-dim: #3d4f9e;
+      --text: #e2e6f0;
+      --text-muted: #7b82a0;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #facc15;
+      --radius: 8px;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .app {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    /* ── Form card ───────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .form-group.grow { flex: 1; min-width: 200px; }
+
+    label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input, select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.9rem;
+      padding: 0.55rem 0.75rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input:focus, select:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--text-muted); }
+
+    select option { background: var(--surface2); }
+
+    /* ── Button ──────────────────────────────────────────────────── */
+    button#search-btn {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.55rem 1.5rem;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+      align-self: flex-end;
+      height: 38px;
+    }
+
+    button#search-btn:hover { opacity: 0.88; }
+    button#search-btn:active { transform: scale(0.97); }
+    button#search-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Status banners ──────────────────────────────────────────── */
+    .banner {
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .banner.info    { background: #1e2d4e; border: 1px solid #3b5198; color: #93b4f7; }
+    .banner.error   { background: #2d1a1a; border: 1px solid #7c2c2c; color: var(--red); }
+    .banner.loading { background: #1e2438; border: 1px solid var(--border); color: var(--text-muted); }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results header ──────────────────────────────────────────── */
+    #results { display: none; }
+
+    .results-meta {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .meta-item { display: flex; flex-direction: column; }
+    .meta-item .meta-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+    .meta-item .meta-val   { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+
+    /* ── Entity table ────────────────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    thead { background: var(--surface2); }
+    thead th {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #ffffff06; }
+
+    tbody td {
+      padding: 0.6rem 0.85rem;
+      vertical-align: top;
+      color: var(--text);
+    }
+
+    /* ── Cell provenance popover ─────────────────────────────────── */
+    .cell-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .cell-value { font-weight: 500; }
+
+    .prov-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+      font-family: var(--font);
+    }
+    .prov-trigger:hover { color: var(--accent); }
+
+    .prov-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+    }
+
+    /* High/medium/low confidence colouring */
+    .conf-high .prov-dot  { background: var(--green); }
+    .conf-mid  .prov-dot  { background: var(--yellow); }
+    .conf-low  .prov-dot  { background: var(--red); }
+
+    /* Popover */
+    .popover {
+      position: fixed;
+      z-index: 1000;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.9rem 1rem;
+      max-width: 340px;
+      box-shadow: 0 8px 32px #00000066;
+      font-size: 0.8rem;
+      display: none;
+    }
+
+    .popover.visible { display: block; }
+
+    .popover-close {
+      float: right;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+    }
+    .popover-close:hover { color: var(--text); }
+
+    .popover-url {
+      display: block;
+      color: var(--accent);
+      text-decoration: none;
+      word-break: break-all;
+      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+    }
+    .popover-url:hover { text-decoration: underline; }
+
+    .popover-excerpt {
+      color: var(--text-muted);
+      font-style: italic;
+      border-left: 2px solid var(--border);
+      padding-left: 0.5rem;
+      margin-top: 0.4rem;
+      line-height: 1.5;
+    }
+
+    .popover-conf {
+      margin-top: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+    }
+
+    /* Relevance bar in first col */
+    .relevance-bar-wrap { display: flex; align-items: center; gap: 0.4rem; }
+    .relevance-bar {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .relevance-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+
+    /* Summary row */
+    .summary-row td {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      padding-top: 0.25rem;
+      padding-bottom: 0.6rem;
+      font-style: italic;
+    }
+
+    /* ── Hidden utility ──────────────────────────────────────────── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <h1>⚡ Agentic Search</h1>
+    <p>Extract structured entity tables from the web, with per-cell source provenance.</p>
+  </header>
+
+  <!-- Search Form -->
+  <div class="card">
+    <div class="form-row">
+      <div class="form-group grow">
+        <label for="query-input">Topic Query</label>
+        <input
+          id="query-input"
+          type="text"
+          placeholder='e.g. "top pizza places in Brooklyn"'
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="schema-select">Schema (optional)</label>
+        <select id="schema-select">
+          <option value="">Auto-detect</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="num-results">Results</label>
+        <input id="num-results" type="number" value="10" min="1" max="25" style="width:70px" />
+      </div>
+
+      <button id="search-btn">Search</button>
+    </div>
+  </div>
+
+  <!-- Status area -->
+  <div id="status-area"></div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="results-meta" id="results-meta"></div>
+    <div class="table-wrap">
+      <table id="results-table">
+        <thead id="table-head"></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Popover (singleton) -->
+<div class="popover" id="popover">
+  <button class="popover-close" id="popover-close">✕</button>
+  <strong id="popover-col"></strong>
+  <a class="popover-url" id="popover-url" target="_blank" rel="noopener"></a>
+  <div class="popover-excerpt" id="popover-excerpt"></div>
+  <div class="popover-conf" id="popover-conf"></div>
+</div>
+
+
+<script>
+// ── Globals ────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const queryInput   = $('query-input');
+const schemaSelect = $('schema-select');
+const numResults   = $('num-results');
+const searchBtn    = $('search-btn');
+const statusArea   = $('status-area');
+const resultsDiv   = $('results');
+const resultsMeta  = $('results-meta');
+const tableHead    = $('table-head');
+const tableBody    = $('table-body');
+const popover      = $('popover');
+const popoverClose = $('popover-close');
+
+let activePopoverBtn = null;
+
+// ── Load schemas on startup ────────────────────────────────────────────────
+async function loadSchemas() {
+  try {
+    const res = await fetch('/api/schemas');
+    if (!res.ok) return;
+    const data = await res.json();
+    Object.entries(data).forEach(([name, info]) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${name}  (${info.entity_type})`;
+      opt.title = info.description || '';
+      schemaSelect.appendChild(opt);
+    });
+  } catch (_) { /* silently skip */ }
+}
+
+// ── Status helpers ─────────────────────────────────────────────────────────
+function showLoading(msg) {
+  statusArea.innerHTML = `
+    <div class="banner loading">
+      <div class="spinner"></div>
+      <span>${msg}</span>
+    </div>`;
+}
+
+function showError(msg) {
+  statusArea.innerHTML = `
+    <div class="banner error">
+      <span>⚠️ ${escapeHtml(msg)}</span>
+    </div>`;
+}
+
+function clearStatus() { statusArea.innerHTML = ''; }
+
+// ── Main search ────────────────────────────────────────────────────────────
+async function runSearch() {
+  const query = queryInput.value.trim();
+  if (!query) { queryInput.focus(); return; }
+
+  // Reset UI
+  resultsDiv.style.display = 'none';
+  clearStatus();
+  closePopover();
+  searchBtn.disabled = true;
+  showLoading('Searching the web and extracting entities… (this may take 20–40 s)');
+
+  const body = {
+    query,
+    num_results: parseInt(numResults.value, 10) || 10,
+  };
+  if (schemaSelect.value) body.schema_name = schemaSelect.value;
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    clearStatus();
+    renderResults(data);
+  } catch (e) {
+    showError(e.message || 'Unknown error');
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(data) {
+  const { query, entity_type, columns, entities, metadata } = data;
+
+  // Meta bar
+  const n = entities.length;
+  const ts = metadata?.timestamp
+    ? new Date(metadata.timestamp).toLocaleString()
+    : '—';
+  resultsMeta.innerHTML = `
+    ${metaItem('Query', escapeHtml(query))}
+    ${metaItem('Entity Type', escapeHtml(entity_type || '—'))}
+    ${metaItem('Entities Found', n)}
+    ${metaItem('Sources Consulted', metadata?.sources_consulted ?? '—')}
+    ${metaItem('Run At', ts)}
+  `;
+
+  if (!n) {
+    statusArea.innerHTML = `
+      <div class="banner info">
+        <span>No entities were extracted. Try a different query or schema.</span>
+      </div>`;
+    resultsDiv.style.display = 'block';
+    tableHead.innerHTML = '';
+    tableBody.innerHTML = '';
+    return;
+  }
+
+  // Table head: # | columns... | Relevance
+  tableHead.innerHTML = `<tr>
+    <th>#</th>
+    ${columns.map(c => `<th>${escapeHtml(c)}</th>`).join('')}
+    <th>Relevance</th>
+  </tr>`;
+
+  // Table body
+  tableBody.innerHTML = '';
+  entities.forEach((ent, idx) => {
+    const fields = ent.fields || {};
+    const rel = ent.relevance ?? 1;
+    const pct = Math.round(rel * 100);
+
+    // Main data row
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text-muted);font-size:0.8rem">${idx + 1}</td>
+      ${columns.map(col => {
+        const cell = fields[col];
+        if (!cell) return `<td><span style="color:var(--text-muted)">—</span></td>`;
+        const confClass = cell.confidence >= 0.8 ? 'conf-high'
+                        : cell.confidence >= 0.5 ? 'conf-mid'
+                        : 'conf-low';
+        return `<td>
+          <div class="cell-wrap">
+            <span class="cell-value">${escapeHtml(cell.value ?? '')}</span>
+            <button class="prov-trigger ${confClass}"
+              data-col="${escapeHtml(col)}"
+              data-url="${escapeHtml(cell.source_url ?? '')}"
+              data-excerpt="${escapeHtml(cell.excerpt ?? '')}"
+              data-conf="${cell.confidence ?? 1}"
+              aria-label="Show source for ${escapeHtml(col)}"
+            ><span class="prov-dot"></span> source</button>
+          </div>
+        </td>`;
+      }).join('')}
+      <td>
+        <div class="relevance-bar-wrap">
+          <div class="relevance-bar">
+            <div class="relevance-fill" style="width:${pct}%"></div>
+          </div>
+          <span style="font-size:0.75rem;color:var(--text-muted)">${pct}%</span>
+        </div>
+      </td>`;
+    tableBody.appendChild(tr);
+
+    // Summary sub-row
+    if (ent.summary) {
+      const sr = document.createElement('tr');
+      sr.className = 'summary-row';
+      sr.innerHTML = `
+        <td></td>
+        <td colspan="${columns.length + 1}">${escapeHtml(ent.summary)}</td>`;
+      tableBody.appendChild(sr);
+    }
+  });
+
+  // Attach popover listeners
+  tableBody.querySelectorAll('.prov-trigger').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openPopover(btn); });
+  });
+
+  resultsDiv.style.display = 'block';
+}
+
+function metaItem(label, val) {
+  return `<div class="meta-item">
+    <span class="meta-label">${label}</span>
+    <span class="meta-val">${val}</span>
+  </div>`;
+}
+
+// ── Popover ────────────────────────────────────────────────────────────────
+function openPopover(btn) {
+  if (activePopoverBtn === btn) { closePopover(); return; }
+  activePopoverBtn = btn;
+
+  const url     = btn.dataset.url;
+  const excerpt = btn.dataset.excerpt;
+  const conf    = parseFloat(btn.dataset.conf || '1');
+  const col     = btn.dataset.col;
+
+  $('popover-col').textContent    = col;
+  $('popover-excerpt').textContent = excerpt || '(no excerpt)';
+  $('popover-conf').textContent   = `Confidence: ${Math.round(conf * 100)}%`;
+
+  const urlEl = $('popover-url');
+  if (url && url !== 'openai_search_summary') {
+    urlEl.href = url;
+    urlEl.textContent = url;
+    urlEl.style.display = 'block';
+  } else {
+    urlEl.textContent = url === 'openai_search_summary' ? 'OpenAI Search Summary' : '(no URL)';
+    urlEl.removeAttribute('href');
+    urlEl.style.display = 'block';
+  }
+
+  // Position near button
+  const rect = btn.getBoundingClientRect();
+  const pw = 340;
+  let left = rect.left;
+  if (left + pw > window.innerWidth - 16) left = window.innerWidth - pw - 16;
+  popover.style.left = `${left}px`;
+  popover.style.top  = `${rect.bottom + window.scrollY + 6}px`;
+  popover.classList.add('visible');
+}
+
+function closePopover() {
+  popover.classList.remove('visible');
+  activePopoverBtn = null;
+}
+
+// ── Escape HTML ────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Event wiring ───────────────────────────────────────────────────────────
+searchBtn.addEventListener('click', runSearch);
+queryInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+popoverClose.addEventListener('click', closePopover);
+document.addEventListener('click', e => {
+  if (!popover.contains(e.target) && !e.target.closest('.prov-trigger')) {
+    closePopover();
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadSchemas();
+queryInput.focus();
+</script>
+
+</body>
+</html>
