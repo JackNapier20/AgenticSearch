@@ -317,6 +317,86 @@
 
     /* ── Hidden utility ──────────────────────────────────────────── */
     .hidden { display: none !important; }
+
+    /* ── History panel ───────────────────────────────────────────── */
+    #history-panel {
+      margin-top: 2.5rem;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .history-header h2 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+    }
+
+    #clear-history-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 0.75rem;
+      padding: 0.2rem 0.65rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #clear-history-btn:hover { border-color: var(--red); color: var(--red); }
+
+    #history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.6rem 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .history-item:hover { border-color: var(--accent); background: var(--surface2); }
+
+    .history-item-query {
+      flex: 1;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-item-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .history-badge {
+      font-size: 0.7rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      color: var(--accent);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -344,13 +424,6 @@
       </div>
 
       <div class="form-group">
-        <label for="schema-select">Schema (optional)</label>
-        <select id="schema-select">
-          <option value="">Auto-detect</option>
-        </select>
-      </div>
-
-      <div class="form-group">
         <label for="num-results">Results</label>
         <input id="num-results" type="number" value="10" min="1" max="25" style="width:70px" />
       </div>
@@ -373,6 +446,15 @@
     </div>
   </div>
 
+  <!-- History panel (browser-local only, never sent to server) -->
+  <div id="history-panel" class="hidden">
+    <div class="history-header">
+      <h2>Previous Searches</h2>
+      <button id="clear-history-btn">Clear history</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
 </div>
 
 <!-- Popover (singleton) -->
@@ -389,7 +471,6 @@
 // ── Globals ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const queryInput   = $('query-input');
-const schemaSelect = $('schema-select');
 const numResults   = $('num-results');
 const searchBtn    = $('search-btn');
 const statusArea   = $('status-area');
@@ -401,22 +482,6 @@ const popover      = $('popover');
 const popoverClose = $('popover-close');
 
 let activePopoverBtn = null;
-
-// ── Load schemas on startup ────────────────────────────────────────────────
-async function loadSchemas() {
-  try {
-    const res = await fetch('/api/schemas');
-    if (!res.ok) return;
-    const data = await res.json();
-    Object.entries(data).forEach(([name, info]) => {
-      const opt = document.createElement('option');
-      opt.value = name;
-      opt.textContent = `${name}  (${info.entity_type})`;
-      opt.title = info.description || '';
-      schemaSelect.appendChild(opt);
-    });
-  } catch (_) { /* silently skip */ }
-}
 
 // ── Status helpers ─────────────────────────────────────────────────────────
 function showLoading(msg) {
@@ -452,7 +517,6 @@ async function runSearch() {
     query,
     num_results: parseInt(numResults.value, 10) || 10,
   };
-  if (schemaSelect.value) body.schema_name = schemaSelect.value;
 
   try {
     const res = await fetch('/api/search', {
@@ -469,6 +533,7 @@ async function runSearch() {
     const data = await res.json();
     clearStatus();
     renderResults(data);
+    saveToHistory(data);
   } catch (e) {
     showError(e.message || 'Unknown error');
   } finally {
@@ -626,6 +691,72 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Local history (localStorage only — never sent to server) ───────────────
+const HISTORY_KEY    = 'agenticsearch_history';
+const HISTORY_MAX    = 20;
+const historyPanel   = $('history-panel');
+const historyList    = $('history-list');
+const clearHistoryBtn = $('clear-history-btn');
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch (_) { return []; }
+}
+
+function saveToHistory(data) {
+  const entry = {
+    id:            Date.now(),
+    query:         data.query || '',
+    entity_type:   data.entity_type || '',
+    entities_count: (data.entities || []).length,
+    timestamp:     new Date().toISOString(),
+    data,
+  };
+  const history = loadHistory().filter(e => e.query !== entry.query); // dedupe by query
+  history.unshift(entry);
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX)));
+  } catch (_) { /* quota exceeded — silently skip */ }
+  renderHistory();
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  if (!history.length) {
+    historyPanel.classList.add('hidden');
+    return;
+  }
+  historyPanel.classList.remove('hidden');
+  historyList.innerHTML = '';
+  history.forEach(entry => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const ts = entry.timestamp
+      ? new Date(entry.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '';
+    item.innerHTML = `
+      <span class="history-item-query">${escapeHtml(entry.query)}</span>
+      <span class="history-badge">${escapeHtml(entry.entity_type || '—')}</span>
+      <span class="history-item-meta">${entry.entities_count} entities · ${ts}</span>
+    `;
+    item.addEventListener('click', () => {
+      resultsDiv.style.display = 'none';
+      clearStatus();
+      closePopover();
+      renderResults(entry.data);
+    });
+    historyList.appendChild(item);
+  });
+}
+
+function clearHistory() {
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
+}
+
+clearHistoryBtn.addEventListener('click', clearHistory);
+
 // ── Event wiring ───────────────────────────────────────────────────────────
 searchBtn.addEventListener('click', runSearch);
 queryInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
@@ -637,7 +768,7 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-loadSchemas();
+renderHistory();
 queryInput.focus();
 </script>
 

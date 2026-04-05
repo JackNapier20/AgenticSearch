@@ -3,7 +3,8 @@ LLM-based entity extraction module.
 
 Strategy:
   1. Infer entity type and relevant columns from the query (fast, cheap call).
-  2. Extract candidates per page/passage (keeps provenance tight, avoids giant prompts).
+  2. Extract candidates per page/passage in parallel (keeps provenance tight,
+     avoids giant prompts, and runs all sources concurrently).
   3. Consolidate + deduplicate across all candidates into final EntityRows.
   4. Fallback: if strict parsing fails, use a lenient re-parse before giving up.
 """
@@ -12,7 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Type
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -21,9 +23,17 @@ from schema import (
     SearchTableResponse, EntityRow, CellValue,
     schema_to_prompt_description, build_entity_row_prompt_spec,
 )
+from schemas import get_few_shot_example
 from scraper import ScrapedPage
 
 logger = logging.getLogger(__name__)
+
+# Maximum number of scraped pages to send to LLM (search_summary always added on top)
+MAX_PAGE_SOURCES = 4
+# Maximum parallel LLM calls for per-source extraction
+MAX_EXTRACTION_WORKERS = 5
+# Character budget per source text
+MAX_CHARS_PER_SOURCE = 4000
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +92,7 @@ def _extract_from_source(
     Returns a list of raw dicts (not yet validated) for leniency.
     """
     col_list = ", ".join(f'"{c}"' for c in columns)
-    example = build_entity_row_prompt_spec(columns)
+    example = get_few_shot_example(entity_type, columns)
 
     prompt = (
         f"You are extracting structured data about {entity_type}s from a web page.\n\n"
@@ -104,6 +114,7 @@ def _extract_from_source(
     )
 
     try:
+        t0 = time.perf_counter()
         response = client.chat.completions.create(
             model=model,
             response_format={"type": "json_object"},
@@ -111,9 +122,12 @@ def _extract_from_source(
             temperature=0.1,
             max_tokens=2000,
         )
+        elapsed = time.perf_counter() - t0
         data = json.loads(response.choices[0].message.content)
         candidates = data.get("entities", [])
-        logger.debug(f"  Source {source_url[:60]}: got {len(candidates)} candidate(s)")
+        logger.info(
+            f"  [TIMING] extract {source_url[:55]!r}: {len(candidates)} candidate(s) in {elapsed:.1f}s"
+        )
         return candidates
     except Exception as e:
         logger.warning(f"  Extraction failed for {source_url}: {e}")
@@ -123,6 +137,24 @@ def _extract_from_source(
 # ---------------------------------------------------------------------------
 # Step 3: Consolidate candidates across sources
 # ---------------------------------------------------------------------------
+
+def _slim_candidates(candidates: list[dict]) -> list[dict]:
+    """
+    Strip verbose excerpt strings from each candidate's fields before sending
+    to the consolidation LLM, reducing token usage without losing entity values.
+    """
+    slimmed = []
+    for c in candidates:
+        sc = {k: v for k, v in c.items() if k != "excerpt"}
+        if isinstance(sc.get("fields"), dict):
+            sc["fields"] = {
+                col: {fk: fv for fk, fv in cell.items() if fk != "excerpt"}
+                for col, cell in sc["fields"].items()
+                if isinstance(cell, dict)
+            }
+        slimmed.append(sc)
+    return slimmed
+
 
 def _consolidate(
     query: str,
@@ -139,11 +171,12 @@ def _consolidate(
     if not all_candidates:
         return []
 
-    # If only a few, skip the consolidation LLM call
+    # Skip the consolidation LLM call when there are only a few candidates
     if len(all_candidates) <= 3:
         return all_candidates
 
-    candidates_json = json.dumps(all_candidates, indent=1)
+    slim = _slim_candidates(all_candidates)
+    candidates_json = json.dumps(slim, indent=1)
     col_list = ", ".join(f'"{c}"' for c in columns)
 
     prompt = (
@@ -156,22 +189,26 @@ def _consolidate(
         "1. Merge duplicates into single rows, preserving the best source evidence.\n"
         "2. Remove irrelevant entries.\n"
         "3. Sort by relevance (highest first).\n"
-        "4. For merged entities, keep the source_url and excerpt from the best evidence.\n\n"
+        "4. For merged entities, keep the source_url from the best evidence.\n\n"
         "Return a JSON object: {\"entities\": [<consolidated entity rows>]}\n"
         "Each entity must have the same structure: entity_type, fields, summary, relevance.\n\n"
         f"CANDIDATES:\n{candidates_json}"
     )
 
     try:
+        t0 = time.perf_counter()
         response = client.chat.completions.create(
             model=model,
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
-            max_tokens=4000,
+            max_tokens=2000,
         )
+        elapsed = time.perf_counter() - t0
         data = json.loads(response.choices[0].message.content)
-        return data.get("entities", all_candidates)
+        result = data.get("entities", all_candidates)
+        logger.info(f"  [TIMING] consolidation: {elapsed:.1f}s → {len(result)} entities")
+        return result
     except Exception as e:
         logger.warning(f"Consolidation failed ({e}), using unmerged candidates")
         return all_candidates
@@ -206,13 +243,11 @@ def _repair_entity(raw: dict, idx: int) -> EntityRow | None:
     building the fields dict manually from whatever is present.
     """
     try:
-        # Determine fields
         reserved = {"entity_type", "summary", "relevance", "source_urls",
                     "relevant_snippets", "attributes", "category", "fields"}
 
         fields_raw = raw.get("fields", {})
         if not fields_raw:
-            # Try extracting from top-level keys
             for k, v in raw.items():
                 if k not in reserved and isinstance(v, dict):
                     fields_raw[k] = v
@@ -224,7 +259,6 @@ def _repair_entity(raw: dict, idx: int) -> EntityRow | None:
             try:
                 fields[col] = CellValue.model_validate(cell)
             except Exception:
-                # Last resort: build a minimal CellValue
                 fields[col] = CellValue(
                     value=str(cell.get("value", cell)),
                     source_url=cell.get("source_url", cell.get("url", "")),
@@ -263,14 +297,15 @@ def extract_entities(
 
     Strategy:
       1. Infer entity_type + columns from query (or use schema_hint if provided).
-      2. Extract candidates per source (page text and/or search_summary).
-      3. Consolidate across sources.
-      4. Parse with lenient fallback.
+      2. Collect up to MAX_PAGE_SOURCES scraped pages + always the search_summary.
+      3. Extract candidates from all sources in parallel (ThreadPoolExecutor).
+      4. Consolidate across sources (cheaper: excerpts stripped before sending).
+      5. Parse with lenient fallback.
 
     Args:
         query: The original topic query.
         pages: Scraped pages to extract from.
-        search_summary: Raw OpenAI search summary text (used as a source if pages are thin).
+        search_summary: Raw OpenAI search summary text (always used as a source).
         schema_hint: Optional EntitySchemaHint to override dynamic column inference.
         model: OpenAI model for extraction.
 
@@ -280,6 +315,7 @@ def extract_entities(
     client = OpenAI()
 
     # --- 1. Infer schema (or use hint) ---
+    t_schema = time.perf_counter()
     if schema_hint is not None:
         entity_type = schema_hint.entity_type
         columns = schema_hint.columns
@@ -287,14 +323,17 @@ def extract_entities(
     else:
         logger.info("Inferring entity type and columns from query...")
         entity_type, columns = infer_schema(query, client, model)
-        logger.info(f"  entity_type={entity_type!r}, columns={columns}")
+        schema_elapsed = time.perf_counter() - t_schema
+        logger.info(
+            f"  [TIMING] schema_inference: {schema_elapsed:.1f}s  "
+            f"entity_type={entity_type!r}, columns={columns}"
+        )
 
-    # --- 2. Collect sources ---
-    # Use scraped pages that have content; always include search_summary as a source
-    sources: list[tuple[str, str]] = []  # (url, text)
+    # --- 2. Collect sources (cap scraped pages; always include search_summary) ---
+    sources: list[tuple[str, str]] = []
 
     successful_pages = [p for p in pages if p.success and p.text.strip()]
-    for page in successful_pages:
+    for page in successful_pages[:MAX_PAGE_SOURCES]:
         sources.append((page.url, page.text))
 
     if search_summary and search_summary.strip():
@@ -304,23 +343,35 @@ def extract_entities(
         logger.warning("No sources available (all scrapes failed and no search_summary).")
         return SearchTableResponse(query=query, entity_type=entity_type, columns=columns)
 
-    logger.info(f"Extracting from {len(sources)} source(s) (pages + summary)...")
+    logger.info(f"Extracting from {len(sources)} source(s) (up to {MAX_PAGE_SOURCES} pages + summary)...")
 
-    # --- 3. Per-source extraction ---
+    # --- 3. Per-source extraction — parallel ---
+    t_extract = time.perf_counter()
     all_candidates: list[dict] = []
-    for url, text in sources:
-        candidates = _extract_from_source(
-            query=query,
-            entity_type=entity_type,
-            columns=columns,
-            source_url=url,
-            source_text=text[:6000],   # cap per-source to avoid token limits
-            client=client,
-            model=model,
-        )
-        all_candidates.extend(candidates)
+    n_workers = min(len(sources), MAX_EXTRACTION_WORKERS)
 
-    logger.info(f"Total raw candidates: {len(all_candidates)}")
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {
+            pool.submit(
+                _extract_from_source,
+                query, entity_type, columns,
+                url, text[:MAX_CHARS_PER_SOURCE],
+                client, model,
+            ): url
+            for url, text in sources
+        }
+        for future in as_completed(futures):
+            try:
+                candidates = future.result()
+                all_candidates.extend(candidates)
+            except Exception as e:
+                logger.warning(f"  Future failed for {futures[future]}: {e}")
+
+    extraction_elapsed = time.perf_counter() - t_extract
+    logger.info(
+        f"  [TIMING] extraction ({len(sources)} sources, parallel): "
+        f"{extraction_elapsed:.1f}s  raw candidates={len(all_candidates)}"
+    )
 
     # --- 4. Consolidate ---
     if len(sources) > 1:
